@@ -172,10 +172,18 @@ export default function App() {
             setGameState(prev => ({ ...prev, loadingProgress: progress }));
           });
           
+          // Randomize rounds order and images within rounds
+          const shuffledRounds = [...generatedRounds].sort(() => Math.random() - 0.5);
+          const randomizedRounds = shuffledRounds.map((round: any, index: number) => ({
+            ...round,
+            id: index + 1,
+            images: [...round.images].sort(() => Math.random() - 0.5)
+          }));
+
           setGameState(prev => ({
             ...prev,
             status: 'PLAYING',
-            rounds: generatedRounds,
+            rounds: randomizedRounds,
             loadingProgress: 100
           }));
           setCurrentRoundIndex(0);
