@@ -33,6 +33,7 @@ interface ActiveSession {
   lastActive: any;
   currentScore?: number;
   progress?: number;
+  timeLeft?: number;
 }
 
 export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
@@ -42,6 +43,11 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState('rank');
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
 // // --- HANDLERS ---
   const handleDelete = async (id: string, name: string) => {
@@ -63,6 +69,7 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
       const masterMap = new Map<string, PlayerData>();
 
       actives.forEach(u => {
+        const timeElapsed = u.timeLeft !== undefined ? 300 - u.timeLeft : 0;
         masterMap.set(u.id, {
           id: u.id,
           name: u.name,
@@ -70,16 +77,18 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
           score: u.currentScore || 0,
           timestamp: u.lastActive,
           status: 'LIVE',
-          timeTaken: '00:00' 
+          timeTaken: formatTime(timeElapsed)
         });
       });
 
 
       submissions.forEach(p => {
+        // Handle timeTaken if it exists (number or string), else default to 00:00
+        const t = p.timeTaken ? (typeof p.timeTaken === 'number' ? formatTime(p.timeTaken) : p.timeTaken) : '00:00';
         masterMap.set(p.id, {
           ...p,
           status: 'LOCKED',
-          timeTaken: '00:00'
+          timeTaken: t
         });
       });
 
@@ -217,7 +226,7 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
                           {u.currentScore || 0}/6
                         </div>
                         <div className="flex items-center justify-end gap-1 text-[8px] text-yellow-500 font-bold mt-1">
-                          <Timer size={8} /> 00:00
+                          <Timer size={8} /> {u.timeTaken || '00:00'}
                         </div>
                       </div>
                     </div>
@@ -302,7 +311,7 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
                           </td>
                           <td className="p-4 text-center">
                              <div className="flex flex-col items-center">
-                                <span className="text-xs font-mono text-white">00:00</span>
+                                <span className="text-xs font-mono text-white">{p.timeTaken}</span>
                                 <span className="text-[8px] text-gray-500 uppercase tracking-tighter">min:sec</span>
                              </div>
                           </td>

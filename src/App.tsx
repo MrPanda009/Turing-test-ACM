@@ -45,11 +45,12 @@ export default function App() {
 
   // --- GAME FINISH LOGIC (Moved up so Timer can use it) ---
   const finishGame = useCallback(async () => {
-    await saveScore(gameState.teamName, gameState.score);
+    const timeTaken = 300 - timeLeft;
+    await saveScore(gameState.teamName, gameState.score, timeTaken);
     if (user) await deleteDoc(doc(db, "active_sessions", user.uid)).catch(() => {});
     setGameState(prev => ({ ...prev, status: 'FINISHED' }));
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [gameState.teamName, gameState.score, user]);
+  }, [gameState.teamName, gameState.score, user, timeLeft]);
 
   // --- TIMER LOGIC ---
   useEffect(() => {

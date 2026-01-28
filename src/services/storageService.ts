@@ -32,7 +32,7 @@ export const savePartialProgress = async (rounds: any[], score: number, teamName
 };
 
 // SAVE FINAL SCORE
-export const saveScore = async (teamName: string, score: number) => {
+export const saveScore = async (teamName: string, score: number, timeTaken?: number) => {
   if (!auth.currentUser) {
     console.error("ACCESS_DENIED: No authenticated agent found.");
     return;
@@ -43,6 +43,7 @@ export const saveScore = async (teamName: string, score: number) => {
       name: teamName,
       email: auth.currentUser.email,
       score: score,
+      timeTaken: timeTaken || 0,
       timestamp: serverTimestamp(),
       status: 'LOCKED'
     });
