@@ -40,6 +40,7 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
   const [activeUsers, setActiveUsers] = useState<ActiveSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState('rank');
 
 
 // // --- HANDLERS ---
@@ -62,7 +63,7 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
       const masterMap = new Map<string, PlayerData>();
 
       actives.forEach(u => {
-        masterMap.set(u.email, {
+        masterMap.set(u.id, {
           id: u.id,
           name: u.name,
           email: u.email,
@@ -75,7 +76,7 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
 
 
       submissions.forEach(p => {
-        masterMap.set(p.email, {
+        masterMap.set(p.id, {
           ...p,
           status: 'LOCKED',
           timeTaken: '00:00'
@@ -124,11 +125,31 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
   };
 
   const filteredPlayers = useMemo(() => {
-    return players.filter(p => 
-      p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    let result = players.filter(p => 
+      p.email?.toLowerCase()?.includes(searchQuery.toLowerCase()) ||
+      p.name?.toLowerCase()?.includes(searchQuery.toLowerCase())
     );
-  }, [players, searchQuery]);
+
+    switch (sortOption) {
+      case 'score':
+        result.sort((a, b) => b.score - a.score);
+        break;
+      case 'time_taken':
+        result.sort((a, b) => (a.timestamp?.toMillis() || 0) - (b.timestamp?.toMillis() || 0));
+        break;
+      case 'status':
+        result.sort((a, b) => a.status.localeCompare(b.status));
+        break;
+      case 'rank':
+      default:
+        result.sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return (a.timestamp?.toMillis() || 0) - (b.timestamp?.toMillis() || 0);
+        });
+        break;
+    }
+    return result;
+  }, [players, searchQuery, sortOption]);
 
   const exportToCSV = () => {
     const headers = ["Rank", "Name", "Email", "Score", "Status"];
@@ -223,15 +244,27 @@ export default function AdminDashboard({ onExit }: { onExit?: () => void }) {
                   <div className="bg-[#00FF9D] text-black font-bold px-3 py-1 border-2 border-black transform -rotate-1 text-xs">UNIFIED_LEADERBOARD</div>
                   <span className="uppercase font-bold tracking-widest text-sm">Real_Time_Logs</span>
                 </div>
-                <div className="relative w-full md:w-72">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                  <input 
-                    type="text" 
-                    placeholder="Filter_by_Agent..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-black border-2 border-gray-700 px-10 py-2 outline-none focus:border-[#00FF9D] text-xs font-mono"
-                  />
+                <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
+                  <div className="relative w-full md:w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                    <input 
+                      type="text" 
+                      placeholder="Filter_by_Agent..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-black border-2 border-gray-700 px-10 py-2 outline-none focus:border-[#00FF9D] text-xs font-mono"
+                    />
+                  </div>
+                  <select
+                    value={sortOption}
+                    onChange={(e) => setSortOption(e.target.value)}
+                    className="bg-black border-2 border-gray-700 px-4 py-2 outline-none focus:border-[#00FF9D] text-xs font-mono text-white uppercase cursor-pointer h-full"
+                  >
+                    <option value="rank">Sort: Rank</option>
+                    <option value="score">Sort: Score</option>
+                    <option value="time_taken">Sort: Time</option>
+                    <option value="status">Sort: Status</option>
+                  </select>
                 </div>
               </div>
 
