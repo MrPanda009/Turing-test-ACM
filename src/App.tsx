@@ -29,6 +29,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const lastRoundIndexRef = useRef<number>(-1);
+  const lastRoundAutoFinishRef = useRef(false);
   
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   
@@ -55,6 +56,32 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [gameState.teamName, gameState.score, user]);
 
+  const finalizeCurrentRound = useCallback((opts?: { forceNoChoice?: boolean }) => {
+    setGameState(prev => {
+      const round = prev.rounds[currentRoundIndex];
+      if (!round) return prev;
+
+      const hasChoice = round.userChoiceId !== null && round.userChoiceId !== undefined;
+      if (hasChoice) return prev;
+
+      if (!opts?.forceNoChoice) {
+        // Not forcing a submission: still persist current state for safety.
+        const currentScore = prev.rounds.filter(r => r.isCorrect).length;
+        savePartialProgress(prev.rounds, currentScore, prev.teamName);
+        return prev;
+      }
+
+      const newRounds = prev.rounds.map((r, idx) => {
+        if (idx !== currentRoundIndex) return r;
+        return { ...r, userChoiceId: "__NO_CHOICE__", isCorrect: false };
+      });
+
+      const currentScore = newRounds.filter(r => r.isCorrect).length;
+      savePartialProgress(newRounds, currentScore, prev.teamName);
+      return { ...prev, rounds: newRounds, score: currentScore };
+    });
+  }, [currentRoundIndex]);
+
   // --- GLOBAL TIMER LOGIC ---
   useEffect(() => {
     let timerId: any;
@@ -72,6 +99,28 @@ export default function App() {
       if (timerId) clearInterval(timerId);
     };
   }, [gameState.status, timeLeft, finishGame]);
+
+  // --- AUTO-FINISH WHEN LAST ROUND HAS A CHOICE ---
+  useEffect(() => {
+    if (gameState.status !== 'PLAYING') {
+      lastRoundAutoFinishRef.current = false;
+      return;
+    }
+
+    const isLastRound = currentRoundIndex === gameState.rounds.length - 1;
+    if (!isLastRound) {
+      lastRoundAutoFinishRef.current = false;
+      return;
+    }
+
+    const round = gameState.rounds[currentRoundIndex];
+    const isAnswered = round?.userChoiceId !== null && round?.userChoiceId !== undefined;
+
+    if (isAnswered && !lastRoundAutoFinishRef.current) {
+      lastRoundAutoFinishRef.current = true;
+      finishGame();
+    }
+  }, [gameState.status, currentRoundIndex, gameState.rounds, gameState.score, finishGame]);
 
   // --- PER-ROUND TIMER LOGIC (5s per image pair) ---
   useEffect(() => {
@@ -91,6 +140,10 @@ export default function App() {
 
     // When countdown hits zero, auto-advance to the next round (or finish)
     if (roundTimeLeft <= 0) {
+      // IMPORTANT: reset round timer BEFORE advancing, otherwise the next render may still see 0s
+      // and immediately auto-advance again in the same effect flush.
+      setRoundTimeLeft(ROUND_TIME_LIMIT);
+      finalizeCurrentRound({ forceNoChoice: true });
       if (currentRoundIndex < gameState.rounds.length - 1) {
         setCurrentRoundIndex((prev) => prev + 1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -106,7 +159,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(intervalId);
-  }, [gameState.status, currentRoundIndex, gameState.rounds, roundTimeLeft, finishGame]);
+  }, [gameState.status, currentRoundIndex, gameState.rounds, roundTimeLeft, finishGame, finalizeCurrentRound]);
 
 
   // --- HEARTBEAT SYSTEM ---
@@ -285,9 +338,19 @@ export default function App() {
       savePartialProgress(newRounds, currentScore, prev.teamName);
       return { ...prev, rounds: newRounds, score: currentScore };
     });
-  }, []);
+
+    // UX: as soon as a choice is made, move to the next sequence (except last round).
+    const isActiveRound = currentRoundIndex + 1 === roundId; // round.id is 1-based
+    const isLastRound = currentRoundIndex === gameState.rounds.length - 1;
+    if (isActiveRound && !isLastRound) {
+      setRoundTimeLeft(ROUND_TIME_LIMIT);
+      setCurrentRoundIndex(prev => prev + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentRoundIndex, gameState.rounds.length]);
 
   const handleNextRound = () => {
+    finalizeCurrentRound();
     if (currentRoundIndex < gameState.rounds.length - 1) {
       setCurrentRoundIndex(prev => prev + 1);
       setRoundTimeLeft(ROUND_TIME_LIMIT);
