@@ -31,8 +31,11 @@ export default function App() {
   
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   
-  // NEW: Timer State (300s = 5 mins)
+  // NEW: Global Timer State (300s = 5 mins)
   const [timeLeft, setTimeLeft] = useState(300);
+  // NEW: Per-Round Timer State (5s per image pair)
+  const ROUND_TIME_LIMIT = 5;
+  const [roundTimeLeft, setRoundTimeLeft] = useState(ROUND_TIME_LIMIT);
 
   const [gameState, setGameState] = useState<GameState>({
     status: 'LOGIN',
@@ -51,7 +54,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [gameState.teamName, gameState.score, user]);
 
-  // --- TIMER LOGIC ---
+  // --- GLOBAL TIMER LOGIC ---
   useEffect(() => {
     let timerId: any;
 
@@ -68,6 +71,39 @@ export default function App() {
       if (timerId) clearInterval(timerId);
     };
   }, [gameState.status, timeLeft, finishGame]);
+
+  // --- PER-ROUND TIMER LOGIC (5s per image pair) ---
+  useEffect(() => {
+    // Only run per-round timer while playing and when a round is active
+    if (gameState.status !== 'PLAYING') return;
+    if (!gameState.rounds[currentRoundIndex]) return;
+
+    // When a new round starts, reset the per-round timer
+    setRoundTimeLeft(ROUND_TIME_LIMIT);
+  }, [gameState.status, currentRoundIndex, gameState.rounds, ROUND_TIME_LIMIT]);
+
+  useEffect(() => {
+    if (gameState.status !== 'PLAYING') return;
+    if (!gameState.rounds[currentRoundIndex]) return;
+
+    // When countdown hits zero, auto-advance to the next round (or finish)
+    if (roundTimeLeft <= 0) {
+      if (currentRoundIndex < gameState.rounds.length - 1) {
+        setCurrentRoundIndex((prev) => prev + 1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        // Last round: finish game automatically
+        finishGame();
+      }
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      setRoundTimeLeft((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [gameState.status, currentRoundIndex, gameState.rounds, roundTimeLeft, finishGame]);
 
 
   // --- HEARTBEAT SYSTEM ---
@@ -251,6 +287,7 @@ export default function App() {
   const handleNextRound = () => {
     if (currentRoundIndex < gameState.rounds.length - 1) {
       setCurrentRoundIndex(prev => prev + 1);
+      setRoundTimeLeft(ROUND_TIME_LIMIT);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
@@ -264,6 +301,7 @@ export default function App() {
     }));
     setCurrentRoundIndex(0); 
     setTimeLeft(300);
+    setRoundTimeLeft(ROUND_TIME_LIMIT);
   }, []);
 
   // Helper variables for UI
@@ -399,7 +437,15 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-4 sm:gap-8">
-             {/* TIMER DISPLAY */}
+             {/* PER-ROUND TIMER DISPLAY (5s) */}
+             <div className="flex items-center gap-2 border border-[#00FF9D]/40 bg-black/40 px-3 py-1.5 rounded">
+                <Timer size={14} className="text-[#00FF9D]" />
+                <span className="font-mono text-sm font-bold tracking-widest text-[#00FF9D]">
+                  {Math.max(roundTimeLeft, 0)}s
+                </span>
+             </div>
+
+             {/* GLOBAL TIMER DISPLAY */}
              <div className="flex items-center gap-2 border border-[#FF00E6]/30 bg-black/40 px-3 py-1.5 rounded">
                 {timeLeft < 60 ? (
                   <AlertTriangle size={16} className="text-red-500 animate-pulse" />
