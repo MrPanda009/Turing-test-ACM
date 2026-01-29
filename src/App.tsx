@@ -28,11 +28,16 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const lastRoundIndexRef = useRef<number>(-1);
+  const lastRoundAutoFinishRef = useRef(false);
   
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   
-  // NEW: Timer State (300s = 5 mins)
+  // NEW: Global Timer State (300s = 5 mins)
   const [timeLeft, setTimeLeft] = useState(300);
+  // NEW: Per-Round Timer State (5s per image pair)
+  const ROUND_TIME_LIMIT = 5;
+  const [roundTimeLeft, setRoundTimeLeft] = useState(ROUND_TIME_LIMIT);
 
   const [gameState, setGameState] = useState<GameState>({
     status: 'LOGIN',
@@ -52,7 +57,33 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [gameState.teamName, gameState.score, user, timeLeft]);
 
-  // --- TIMER LOGIC ---
+  const finalizeCurrentRound = useCallback((opts?: { forceNoChoice?: boolean }) => {
+    setGameState(prev => {
+      const round = prev.rounds[currentRoundIndex];
+      if (!round) return prev;
+
+      const hasChoice = round.userChoiceId !== null && round.userChoiceId !== undefined;
+      if (hasChoice) return prev;
+
+      if (!opts?.forceNoChoice) {
+        // Not forcing a submission: still persist current state for safety.
+        const currentScore = prev.rounds.filter(r => r.isCorrect).length;
+        savePartialProgress(prev.rounds, currentScore, prev.teamName);
+        return prev;
+      }
+
+      const newRounds = prev.rounds.map((r, idx) => {
+        if (idx !== currentRoundIndex) return r;
+        return { ...r, userChoiceId: "__NO_CHOICE__", isCorrect: false };
+      });
+
+      const currentScore = newRounds.filter(r => r.isCorrect).length;
+      savePartialProgress(newRounds, currentScore, prev.teamName);
+      return { ...prev, rounds: newRounds, score: currentScore };
+    });
+  }, [currentRoundIndex]);
+
+  // --- GLOBAL TIMER LOGIC ---
   useEffect(() => {
     let timerId: any;
 
@@ -69,6 +100,67 @@ export default function App() {
       if (timerId) clearInterval(timerId);
     };
   }, [gameState.status, timeLeft, finishGame]);
+
+  // --- AUTO-FINISH WHEN LAST ROUND HAS A CHOICE ---
+  useEffect(() => {
+    if (gameState.status !== 'PLAYING') {
+      lastRoundAutoFinishRef.current = false;
+      return;
+    }
+
+    const isLastRound = currentRoundIndex === gameState.rounds.length - 1;
+    if (!isLastRound) {
+      lastRoundAutoFinishRef.current = false;
+      return;
+    }
+
+    const round = gameState.rounds[currentRoundIndex];
+    const isAnswered = round?.userChoiceId !== null && round?.userChoiceId !== undefined;
+
+    if (isAnswered && !lastRoundAutoFinishRef.current) {
+      lastRoundAutoFinishRef.current = true;
+      finishGame();
+    }
+  }, [gameState.status, currentRoundIndex, gameState.rounds, gameState.score, finishGame]);
+
+  // --- PER-ROUND TIMER LOGIC (5s per image pair) ---
+  useEffect(() => {
+    // Only reset per-round timer when the ACTIVE ROUND changes (not when the round object updates, e.g. selecting a photo)
+    if (gameState.status !== 'PLAYING') return;
+    if (!gameState.rounds[currentRoundIndex]) return;
+
+    if (lastRoundIndexRef.current !== currentRoundIndex) {
+      lastRoundIndexRef.current = currentRoundIndex;
+      setRoundTimeLeft(ROUND_TIME_LIMIT);
+    }
+  }, [gameState.status, currentRoundIndex, gameState.rounds.length]);
+
+  useEffect(() => {
+    if (gameState.status !== 'PLAYING') return;
+    if (!gameState.rounds[currentRoundIndex]) return;
+
+    // When countdown hits zero, auto-advance to the next round (or finish)
+    if (roundTimeLeft <= 0) {
+      // IMPORTANT: reset round timer BEFORE advancing, otherwise the next render may still see 0s
+      // and immediately auto-advance again in the same effect flush.
+      setRoundTimeLeft(ROUND_TIME_LIMIT);
+      finalizeCurrentRound({ forceNoChoice: true });
+      if (currentRoundIndex < gameState.rounds.length - 1) {
+        setCurrentRoundIndex((prev) => prev + 1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        // Last round: finish game automatically
+        finishGame();
+      }
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      setRoundTimeLeft((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [gameState.status, currentRoundIndex, gameState.rounds, roundTimeLeft, finishGame, finalizeCurrentRound]);
 
 
   // --- HEARTBEAT SYSTEM ---
@@ -255,11 +347,22 @@ export default function App() {
       savePartialProgress(newRounds, currentScore, prev.teamName);
       return { ...prev, rounds: newRounds, score: currentScore };
     });
-  }, []);
+
+    // UX: as soon as a choice is made, move to the next sequence (except last round).
+    const isActiveRound = currentRoundIndex + 1 === roundId; // round.id is 1-based
+    const isLastRound = currentRoundIndex === gameState.rounds.length - 1;
+    if (isActiveRound && !isLastRound) {
+      setRoundTimeLeft(ROUND_TIME_LIMIT);
+      setCurrentRoundIndex(prev => prev + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentRoundIndex, gameState.rounds.length]);
 
   const handleNextRound = () => {
+    finalizeCurrentRound();
     if (currentRoundIndex < gameState.rounds.length - 1) {
       setCurrentRoundIndex(prev => prev + 1);
+      setRoundTimeLeft(ROUND_TIME_LIMIT);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
@@ -273,6 +376,7 @@ export default function App() {
     }));
     setCurrentRoundIndex(0); 
     setTimeLeft(300);
+    setRoundTimeLeft(ROUND_TIME_LIMIT);
   }, []);
 
   // Helper variables for UI
@@ -390,7 +494,15 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-4 sm:gap-8">
-             {/* TIMER DISPLAY */}
+             {/* PER-ROUND TIMER DISPLAY (5s) */}
+             <div className="flex items-center gap-2 border border-[#00FF9D]/40 bg-black/40 px-3 py-1.5 rounded">
+                <Timer size={14} className="text-[#00FF9D]" />
+                <span className="font-mono text-sm font-bold tracking-widest text-[#00FF9D]">
+                  {Math.max(roundTimeLeft, 0)}s
+                </span>
+             </div>
+
+             {/* GLOBAL TIMER DISPLAY */}
              <div className="flex items-center gap-2 border border-[#FF00E6]/30 bg-black/40 px-3 py-1.5 rounded">
                 {timeLeft < 60 ? (
                   <AlertTriangle size={16} className="text-red-500 animate-pulse" />
