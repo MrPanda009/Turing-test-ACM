@@ -59,7 +59,6 @@ export default function App() {
 
     try {
       // 1. Save to unique document in 'submissions' for history tracking
-      // FIX: Ensure first argument is the collection reference
       await addDoc(collection(db, "submissions"), {
         uid: user.uid,
         name: gameState.teamName,
@@ -73,7 +72,6 @@ export default function App() {
       });
 
       // 2. Clear the active session (Heartbeat cleanup)
-      // FIX: Clean reference to the session document
       const sessionDocRef = doc(db, "active_sessions", user.uid);
       await deleteDoc(sessionDocRef);
 
@@ -88,6 +86,7 @@ export default function App() {
     const roundsRef = updatedRounds || gameState.rounds;
     const isAtLastRound = currentRoundIndex >= roundsRef.length - 1;
     
+    // MODIFICATION: Only increment if we aren't at the end. Otherwise, finish.
     if (!isAtLastRound) {
       setCurrentRoundIndex(prev => prev + 1);
       setRoundTimeLeft(5); 
@@ -133,11 +132,12 @@ export default function App() {
             }
             
             // Scenario B: Round was already answered, timer just hit zero
+            // MODIFICATION: Check if last round to prevent extra index increment
             if (isAtLastRound) {
               finishGame();
               return 0;
             } else {
-              handleNextRound();
+              setCurrentRoundIndex(idx => idx + 1);
               return 5;
             }
           }
@@ -149,7 +149,7 @@ export default function App() {
     return () => {
       if (timerId) clearInterval(timerId);
     };
-  }, [gameState.status, currentRoundIndex, gameState.rounds, handleNextRound, finishGame, gameState.teamName]);
+  }, [gameState.status, currentRoundIndex, gameState.rounds, finishGame, gameState.teamName]);
 
 
   // --- HEARTBEAT SYSTEM (Live Uplink) ---
@@ -215,7 +215,9 @@ export default function App() {
               const answeredCount = savedRounds.filter((r: any) => r.userChoiceId !== undefined).length;
               
               totalElapsedSeconds.current = savedData.totalTimeSpent || 0;
-              setCurrentRoundIndex(answeredCount < savedRounds.length ? answeredCount : 0);
+              // Ensure we don't start out of bounds if they finished
+              const startIndex = answeredCount < savedRounds.length ? answeredCount : 0;
+              setCurrentRoundIndex(startIndex);
               setRoundTimeLeft(5);
 
               setGameState({
@@ -312,6 +314,8 @@ export default function App() {
     }
   }, [user, isAdmin]);
 
+  // MODIFICATION: Selection update logic allows overwriting previous choice 
+  // until the round is officially committed by timer or next button.
   const handleSelection = useCallback((roundId: number, imageId: string) => {
     setGameState(prev => {
       const newRounds = prev.rounds.map(round => {

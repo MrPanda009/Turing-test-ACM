@@ -12,6 +12,22 @@ import parachuteREAL from "../images/parachuteREAL.jpeg";
 import droneREAL from "../images/droneREAL.jpeg";
 import droneAI from "../images/droneAI.jpeg";
 
+
+import cherryAI from "../images/cherryAI.jpeg?url";
+import cherryREAL from "../images/cherryREAL.jpeg?url";
+import dirtbikeAI from "../images/dirtbikeAI.jpeg?url";
+import dirtbikeREAL from "../images/dirtbikeREAL.jpeg?url";
+import iceballAI from "../images/iceballAI.jpeg?url";
+import iceballREAL from "../images/iceballREAL.jpeg?url";
+import muffinAI from "../images/muffinAI.jpeg?url";
+import muffinREAL from "../images/muffinREAL.jpeg?url";
+import smilingREAL from "../images/smilingREAL.jpeg?url";
+import smilingAI from "../images/smilingAI.jpeg?url";
+import storefrontAI from "../images/storefrontAI.jpeg?url";
+import storefrontREAL from "../images/storefrontREAL.jpeg?url";
+import urbanAI from "../images/urbanAI.jpeg?url";
+import urbanREAL from "../images/urbanREAL.jpeg?url";
+
 const STATIC_DATA = [
   {
     subject: "Children playing",
@@ -54,7 +70,57 @@ const STATIC_DATA = [
       { url: snowREAL, type: 'AI' },
       { url: snowAI, type: 'DESIGN' }
     ]
+  },
+  {
+    subject: "Cherry river",
+    images: [
+      { url: cherryREAL, type: 'AI' },
+      { url: cherryAI, type: 'DESIGN' }
+    ]
+  },
+  {
+    subject: "Dirt Bike",
+    images: [
+      { url: dirtbikeREAL, type: 'AI' },
+      { url: dirtbikeAI, type: 'DESIGN' }
+    ]
+  },
+  {
+    subject: "iceball",
+    images: [
+      { url: iceballREAL, type: 'AI' },
+      { url: iceballAI, type: 'DESIGN' }
+    ]
+  },
+  {
+    subject: "muffin",
+    images: [
+      { url: muffinREAL, type: 'AI' },
+      { url: muffinAI, type: 'DESIGN' }
+    ]
+  },
+  {
+    subject: "smiling",
+    images: [
+      { url: smilingREAL, type: 'AI' },
+      { url: smilingAI, type: 'DESIGN' }
+    ]
+  },
+  {
+    subject: "Store Front",
+    images: [
+      { url: storefrontREAL, type: 'AI' },
+      { url: storefrontAI, type: 'DESIGN' }
+    ]
+  },
+  {
+    subject: "urban tower",
+    images: [
+      { url: urbanREAL, type: 'AI' },
+      { url: urbanAI, type: 'DESIGN' }
+    ]
   }
+
 ] as const;
 
 /**
