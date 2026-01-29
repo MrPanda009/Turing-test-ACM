@@ -54,8 +54,12 @@ export default function App() {
   const finishGame = useCallback(async (finalRounds?: any[], finalScore?: number) => {
     if (!user) return;
     
+    // Set status to FINISHED immediately to clear the game UI and show success screen
+    setGameState(prev => ({ ...prev, status: 'FINISHED' }));
+
     try {
       // 1. Save to unique document in 'submissions' for history tracking
+      // FIX: Ensure first argument is the collection reference
       await addDoc(collection(db, "submissions"), {
         uid: user.uid,
         name: gameState.teamName,
@@ -69,27 +73,29 @@ export default function App() {
       });
 
       // 2. Clear the active session (Heartbeat cleanup)
-      await deleteDoc(doc(db, "active_sessions", user.uid));
+      // FIX: Clean reference to the session document
+      const sessionDocRef = doc(db, "active_sessions", user.uid);
+      await deleteDoc(sessionDocRef);
 
-      setGameState(prev => ({ ...prev, status: 'FINISHED' }));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error("Critical submission failure:", err);
-      alert("System Error: Could not uplink results. Check network.");
     }
   }, [gameState.teamName, gameState.score, gameState.rounds, user]);
 
   // --- NAVIGATION LOGIC ---
   const handleNextRound = useCallback((updatedRounds?: any[], updatedScore?: number) => {
-    if (currentRoundIndex < gameState.rounds.length - 1) {
+    const roundsRef = updatedRounds || gameState.rounds;
+    const isAtLastRound = currentRoundIndex >= roundsRef.length - 1;
+    
+    if (!isAtLastRound) {
       setCurrentRoundIndex(prev => prev + 1);
       setRoundTimeLeft(5); 
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      // If manually clicking next on the last round
       finishGame(updatedRounds, updatedScore);
     }
-  }, [currentRoundIndex, gameState.rounds.length, finishGame]);
+  }, [currentRoundIndex, gameState.rounds, finishGame]);
 
   // --- TIMER LOGIC (Per Round + Final Transition Fix) ---
   useEffect(() => {
@@ -102,9 +108,10 @@ export default function App() {
         setRoundTimeLeft((prev) => {
           if (prev <= 1) {
             const currentRound = gameState.rounds[currentRoundIndex];
+            const isAtLastRound = currentRoundIndex >= gameState.rounds.length - 1;
             
-            // If the round hasn't been answered, mark it and move forward
-            if (currentRound && currentRound.userChoiceId === undefined) {
+            // Scenario A: Round has NOT been answered yet (Time Ran Out)
+            if (currentRound && (currentRound.userChoiceId === undefined || currentRound.userChoiceId === null)) {
               const newRounds = [...gameState.rounds];
               newRounds[currentRoundIndex] = { 
                 ...currentRound, 
@@ -115,22 +122,24 @@ export default function App() {
               const newScore = newRounds.filter(r => r.isCorrect).length;
               savePartialProgress(newRounds, newScore, gameState.teamName);
 
-              // Update local state
-              setGameState(prevGS => ({ ...prevGS, rounds: newRounds, score: newScore }));
-
-              // Check if this was the last round timing out
-              if (currentRoundIndex >= newRounds.length - 1) {
+              if (isAtLastRound) {
                 finishGame(newRounds, newScore);
-                return 0; // Stop the timer
+                return 0; 
               } else {
+                setGameState(prevGS => ({ ...prevGS, rounds: newRounds, score: newScore }));
                 setCurrentRoundIndex(idx => idx + 1);
-                return 5; // Reset for next round
+                return 5; 
               }
             }
             
-            // If already answered, trigger standard navigation
-            handleNextRound();
-            return 5;
+            // Scenario B: Round was already answered, timer just hit zero
+            if (isAtLastRound) {
+              finishGame();
+              return 0;
+            } else {
+              handleNextRound();
+              return 5;
+            }
           }
           return prev - 1;
         });
@@ -465,7 +474,7 @@ export default function App() {
       <div className="fixed bottom-0 left-0 w-full p-6 bg-gradient-to-t from-[#13111C] via-[#13111C]/95 to-transparent z-40 border-t border-white/5 backdrop-blur-sm">
         <div className="container mx-auto flex justify-center">
             <button 
-              onClick={handleNextRound} 
+              onClick={() => handleNextRound()} 
               disabled={!isCurrentRoundAnswered} 
               className={`group pointer-events-auto game-btn px-12 py-5 font-heading text-xl uppercase tracking-widest transition-all duration-300 flex items-center gap-4
                 ${isCurrentRoundAnswered 
